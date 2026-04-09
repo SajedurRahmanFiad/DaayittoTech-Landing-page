@@ -1,20 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Sun, Fan, Lightbulb, Smartphone, Tv, Plus, Minus, ArrowRight, CheckCircle2, PhoneCall, MessageCircle, Trash2 } from 'lucide-react';
-import { ComponentItem } from '../types';
+import { ComponentItem, AdminSettings, Order } from '../types';
+import OrderModal, { OrderFormData } from '../components/OrderModal';
 
-const INITIAL_ITEMS: ComponentItem[] = [
-  { id: 'fan', name: 'Fan', nameBn: 'ফ্যান', watts: 60, count: 0 },
-  { id: 'light', name: 'Light', nameBn: 'লাইট', watts: 10, count: 0 },
-  { id: 'phone', name: 'Phone Charging', nameBn: 'ফোন চার্জিং', watts: 5, count: 0 },
-  { id: 'tv', name: 'TV', nameBn: 'টিভি', watts: 100, count: 0 },
-];
+interface CustomizePageProps {
+  settings: AdminSettings;
+  onOrder: (order: Order) => void;
+}
 
-export default function CustomizePage() {
-  const [items, setItems] = useState<ComponentItem[]>(INITIAL_ITEMS);
+export default function CustomizePage({ settings, onOrder }: CustomizePageProps) {
+  const [items, setItems] = useState<ComponentItem[]>([]);
   const [customName, setCustomName] = useState('');
   const [customWatts, setCustomWatts] = useState(0);
-  const [submitted, setSubmitted] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    setItems(settings.componentConfigs.map(config => ({
+      id: config.id,
+      name: config.name,
+      nameBn: config.nameBn,
+      watts: config.defaultWatts || 0,
+      count: 0,
+      type: config.type,
+      price: config.price
+    })));
+  }, [settings]);
 
   const updateCount = (id: string, delta: number) => {
     setItems(items.map(item => 
@@ -36,7 +47,8 @@ export default function CustomizePage() {
         nameBn: customName,
         watts: customWatts,
         count: 1,
-        isCustom: true
+        isCustom: true,
+        type: 'variable'
       };
       setItems([...items, newItem]);
       setCustomName('');
@@ -48,35 +60,37 @@ export default function CustomizePage() {
     setItems(items.filter(item => item.id !== id));
   };
 
-  const totalWatts = items.reduce((acc, item) => acc + (item.watts * item.count), 0);
-  const estimatedPrice = totalWatts * 100 + 10000; // Simplified pricing logic
+  const totalWatts = items.reduce((acc, item) => acc + (item.type === 'variable' ? (item.watts * item.count) : 0), 0);
+  
+  const variableCost = totalWatts * settings.costPerWatt;
+  const fixedCost = items.reduce((acc, item) => acc + (item.type === 'fixed' ? ((item.price || 0) * item.count) : 0), 0);
+  const estimatedPrice = variableCost + fixedCost;
 
-  if (submitted) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-20 text-center">
-        <motion.div 
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="bg-white p-12 border border-gray-200 rounded-xl shadow-sm"
-        >
-          <div className="bg-green-100 w-20 h-20 flex items-center justify-center rounded-full mx-auto mb-8">
-            <CheckCircle2 className="w-10 h-10 text-green-600" />
-          </div>
-          <h2 className="text-3xl font-bold mb-4">আপনার অনুরোধ গ্রহণ করা হয়েছে!</h2>
-          <p className="text-gray-600 mb-8">আমাদের একজন প্রতিনিধি খুব শীঘ্রই আপনার সাথে যোগাযোগ করবেন।</p>
-          <button 
-            onClick={() => setSubmitted(false)}
-            className="text-orange-600 font-bold hover:underline"
-          >
-            আবার শুরু করুন
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
+  const handleOrderSubmit = (formData: OrderFormData) => {
+    const newOrder: Order = {
+      id: Date.now().toString(),
+      customerName: formData.name,
+      phone: formData.phone,
+      address: formData.address,
+      additionalInfo: formData.additionalInfo,
+      customItems: items.filter(i => i.count > 0),
+      totalPrice: estimatedPrice,
+      status: 'draft',
+      createdAt: new Date().toISOString()
+    };
+
+    onOrder(newOrder);
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-12">
+      <OrderModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleOrderSubmit}
+        price={estimatedPrice}
+      />
+
       <div className="text-center mb-12">
         <h1 className="text-3xl md:text-4xl font-bold mb-4">নিজের সোলার প্যাকেজ তৈরি করুন</h1>
         <p className="text-gray-600">আপনার কী কী প্রয়োজন তা নিচে যোগ করুন।</p>
@@ -86,45 +100,63 @@ export default function CustomizePage() {
         {/* Form */}
         <div className="space-y-6">
           <div className="bg-white p-6 md:p-8 border border-gray-200 rounded-xl space-y-6 shadow-sm">
-            {items.map((item) => (
-              <div key={item.id} className="pb-6 border-b border-gray-100 last:border-0 last:pb-0">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-orange-50 p-3 rounded-lg">
-                      {item.id === 'fan' ? <Fan className="w-6 h-6 text-orange-600" /> :
-                       item.id === 'light' ? <Lightbulb className="w-6 h-6 text-orange-600" /> :
-                       item.id === 'phone' ? <Smartphone className="w-6 h-6 text-orange-600" /> :
-                       item.id === 'tv' ? <Tv className="w-6 h-6 text-orange-600" /> :
-                       <Sun className="w-6 h-6 text-orange-600" />}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-lg">{item.nameBn}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <input 
-                          type="number" 
-                          value={item.watts}
-                          onChange={(e) => updateWatts(item.id, Number(e.target.value))}
-                          className="w-16 border border-gray-200 rounded px-1 text-sm font-mono"
-                        />
-                        <span className="text-xs text-gray-500">ওয়াট</span>
+            {items.map((item) => {
+              const config = settings.componentConfigs.find(c => c.id === item.id);
+              return (
+                <div key={item.id} className="pb-6 border-b border-gray-100 last:border-0 last:pb-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-orange-50 p-3 rounded-lg">
+                        {item.id === 'fan' ? <Fan className="w-6 h-6 text-orange-600" /> :
+                         item.id === 'light' ? <Lightbulb className="w-6 h-6 text-orange-600" /> :
+                         item.id === 'tv' ? <Tv className="w-6 h-6 text-orange-600" /> :
+                         <Sun className="w-6 h-6 text-orange-600" />}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-lg">{item.nameBn}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          {item.type === 'fixed' ? (
+                            <span className="text-sm font-bold text-orange-600">৳{item.price?.toLocaleString()}</span>
+                          ) : (
+                            <>
+                              {(!config || config.canEditWatts) ? (
+                                <input 
+                                  type="number" 
+                                  value={item.watts}
+                                  onChange={(e) => updateWatts(item.id, Number(e.target.value))}
+                                  className="w-16 border border-gray-200 rounded px-1 text-sm font-mono"
+                                />
+                              ) : (
+                                <span className="text-sm font-mono font-bold">{item.watts}</span>
+                              )}
+                              <span className="text-xs text-gray-500">ওয়াট</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between sm:justify-end gap-6">
-                    <div className="flex items-center gap-4">
-                      <button onClick={() => updateCount(item.id, -1)} className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50"><Minus className="w-4 h-4" /></button>
-                      <span className="w-6 text-center font-bold text-xl">{item.count}</span>
-                      <button onClick={() => updateCount(item.id, 1)} className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50"><Plus className="w-4 h-4" /></button>
+                    <div className="flex items-center justify-between sm:justify-end gap-6">
+                      <div className="flex items-center gap-4">
+                        {(!config || config.canEditQuantity) ? (
+                          <>
+                            <button onClick={() => updateCount(item.id, -1)} className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50"><Minus className="w-4 h-4" /></button>
+                            <span className="w-6 text-center font-bold text-xl">{item.count}</span>
+                            <button onClick={() => updateCount(item.id, 1)} className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50"><Plus className="w-4 h-4" /></button>
+                          </>
+                        ) : (
+                          <span className="font-bold text-xl">{item.count}টি</span>
+                        )}
+                      </div>
+                      {item.isCustom && (
+                        <button onClick={() => removeCustomItem(item.id)} className="text-red-500 hover:text-red-700">
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
                     </div>
-                    {item.isCustom && (
-                      <button onClick={() => removeCustomItem(item.id)} className="text-red-500 hover:text-red-700">
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* Add Custom Item */}
             <div className="pt-6 border-t border-gray-100">
@@ -187,9 +219,9 @@ export default function CustomizePage() {
             </div>
 
             <button 
-              onClick={() => setSubmitted(true)}
+              onClick={() => setIsModalOpen(true)}
               disabled={totalWatts === 0}
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-lg font-bold text-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
             >
               অর্ডার কনফার্ম করুন <ArrowRight className="w-5 h-5" />
             </button>

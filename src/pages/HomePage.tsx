@@ -1,15 +1,46 @@
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Sun, Battery, Zap, Home, Bike, ArrowRight, CheckCircle2, PhoneCall } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { SolarPackage } from '../types';
+import { SolarPackage, Order } from '../types';
+import OrderModal, { OrderFormData } from '../components/OrderModal';
 
 interface HomePageProps {
   packages: SolarPackage[];
+  onOrder: (order: Order) => void;
 }
 
-export default function HomePage({ packages }: HomePageProps) {
+export default function HomePage({ packages, onOrder }: HomePageProps) {
+  const [selectedPackage, setSelectedPackage] = useState<SolarPackage | null>(null);
+
+  const handleOrderSubmit = (formData: OrderFormData) => {
+    if (!selectedPackage) return;
+
+    const newOrder: Order = {
+      id: Date.now().toString(),
+      customerName: formData.name,
+      phone: formData.phone,
+      address: formData.address,
+      additionalInfo: formData.additionalInfo,
+      packageId: selectedPackage.id,
+      packageName: selectedPackage.nameBn,
+      totalPrice: selectedPackage.price,
+      status: 'draft',
+      createdAt: new Date().toISOString()
+    };
+
+    onOrder(newOrder);
+  };
+
   return (
     <div className="space-y-12 pb-20">
+      <OrderModal 
+        isOpen={!!selectedPackage}
+        onClose={() => setSelectedPackage(null)}
+        onSubmit={handleOrderSubmit}
+        packageName={selectedPackage?.nameBn}
+        price={selectedPackage?.price || 0}
+      />
       {/* Hero Section */}
       <section className="relative min-h-[85vh] flex items-center overflow-hidden bg-orange-600">
         <div className="absolute inset-0 opacity-20">
@@ -157,7 +188,10 @@ export default function HomePage({ packages }: HomePageProps) {
                   </div>
                 </div>
                 <div className="p-8 pt-0">
-                  <button className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-lg font-bold transition-colors text-lg">
+                  <button 
+                    onClick={() => setSelectedPackage(pkg)}
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-lg font-bold transition-colors text-lg"
+                  >
                     অর্ডার করুন
                   </button>
                 </div>

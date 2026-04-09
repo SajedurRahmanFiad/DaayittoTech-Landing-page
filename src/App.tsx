@@ -1,14 +1,15 @@
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Sun, Battery, Zap, Settings, Building2, Home, Bike, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { SolarPackage } from './types';
+import { SolarPackage, Order, AdminSettings, ComponentConfig } from './types';
 
-// Pages (to be implemented in separate files or defined here for simplicity in this turn)
+// Pages
 import HomePage from './pages/HomePage';
 import CustomizePage from './pages/CustomizePage';
 import AdminPage from './pages/AdminPage';
 import AdminPackageDetail from './pages/AdminPackageDetail';
+import AdminLoginPage from './pages/AdminLoginPage';
 
 const DEFAULT_PACKAGES: SolarPackage[] = [
   {
@@ -35,23 +36,84 @@ const DEFAULT_PACKAGES: SolarPackage[] = [
   }
 ];
 
+const DEFAULT_SETTINGS: AdminSettings = {
+  costPerWatt: 100,
+  componentConfigs: [
+    { id: 'light', name: 'Light', nameBn: 'লাইট', type: 'variable', defaultWatts: 15, canEditWatts: true, canEditQuantity: true },
+    { id: 'fan', name: 'Fan', nameBn: 'ফ্যান', type: 'variable', defaultWatts: 60, canEditWatts: true, canEditQuantity: true },
+    { id: 'tv', name: 'TV', nameBn: 'টিভি', type: 'variable', defaultWatts: 80, canEditWatts: true, canEditQuantity: true },
+    { id: 'fridge', name: 'Fridge', nameBn: 'ফ্রিজ', type: 'variable', defaultWatts: 200, canEditWatts: true, canEditQuantity: true },
+    { id: 'inverter', name: 'Inverter', nameBn: 'ইনভার্টার', type: 'fixed', price: 5000, canEditWatts: false, canEditQuantity: true },
+    { id: 'battery', name: 'Battery', nameBn: 'ব্যাটারি', type: 'fixed', price: 8000, canEditWatts: false, canEditQuantity: true },
+  ]
+};
+
 export default function App() {
   const [packages, setPackages] = useState<SolarPackage[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('solar_packages');
-    if (saved) {
-      setPackages(JSON.parse(saved));
+    // Load Packages
+    const savedPackages = localStorage.getItem('solar_packages');
+    if (savedPackages) {
+      setPackages(JSON.parse(savedPackages));
     } else {
       setPackages(DEFAULT_PACKAGES);
       localStorage.setItem('solar_packages', JSON.stringify(DEFAULT_PACKAGES));
+    }
+
+    // Load Orders
+    const savedOrders = localStorage.getItem('solar_orders');
+    if (savedOrders) {
+      setOrders(JSON.parse(savedOrders));
+    }
+
+    // Load Settings
+    const savedSettings = localStorage.getItem('solar_settings');
+    if (savedSettings) {
+      setSettings(JSON.parse(savedSettings));
+    }
+
+    // Load Auth
+    const auth = localStorage.getItem('admin_auth');
+    if (auth === 'true') {
+      setIsAdminAuthenticated(true);
     }
   }, []);
 
   const updatePackages = (newPackages: SolarPackage[]) => {
     setPackages(newPackages);
     localStorage.setItem('solar_packages', JSON.stringify(newPackages));
+  };
+
+  const updateOrders = (newOrders: Order[]) => {
+    setOrders(newOrders);
+    localStorage.setItem('solar_orders', JSON.stringify(newOrders));
+  };
+
+  const updateSettings = (newSettings: AdminSettings) => {
+    setSettings(newSettings);
+    localStorage.setItem('solar_settings', JSON.stringify(newSettings));
+  };
+
+  const handleLogin = (success: boolean) => {
+    if (success) {
+      setIsAdminAuthenticated(true);
+      localStorage.setItem('admin_auth', 'true');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAdminAuthenticated(false);
+    localStorage.removeItem('admin_auth');
+  };
+
+  const addOrder = (order: Order) => {
+    const newOrders = [order, ...orders];
+    updateOrders(newOrders);
   };
 
   return (
@@ -110,11 +172,34 @@ export default function App() {
 
         <main>
           <Routes>
-            <Route path="/" element={<HomePage packages={packages} />} />
-            <Route path="/customize" element={<CustomizePage />} />
-            <Route path="/admin" element={<AdminPage packages={packages} onUpdate={updatePackages} />} />
-            <Route path="/admin/add" element={<AdminPackageDetail onSave={(pkg) => updatePackages([...packages, pkg])} />} />
-            <Route path="/admin/edit/:id" element={<AdminPackageDetail packages={packages} onSave={(pkg) => updatePackages(packages.map(p => p.id === pkg.id ? pkg : p))} />} />
+            <Route path="/" element={<HomePage packages={packages} onOrder={addOrder} />} />
+            <Route path="/customize" element={<CustomizePage settings={settings} onOrder={addOrder} />} />
+            
+            {/* Admin Routes */}
+            <Route 
+              path="/admin/login" 
+              element={isAdminAuthenticated ? <Navigate to="/admin" /> : <AdminLoginPage onLogin={handleLogin} />} 
+            />
+            <Route 
+              path="/admin/*" 
+              element={
+                isAdminAuthenticated ? (
+                  <AdminPage 
+                    packages={packages} 
+                    onUpdatePackages={updatePackages}
+                    orders={orders}
+                    onUpdateOrders={updateOrders}
+                    settings={settings}
+                    onUpdateSettings={updateSettings}
+                    onLogout={handleLogout}
+                  />
+                ) : (
+                  <Navigate to="/admin/login" />
+                )
+              } 
+            />
+            <Route path="/admin/add" element={isAdminAuthenticated ? <AdminPackageDetail onSave={(pkg) => updatePackages([...packages, pkg])} /> : <Navigate to="/admin/login" />} />
+            <Route path="/admin/edit/:id" element={isAdminAuthenticated ? <AdminPackageDetail packages={packages} onSave={(pkg) => updatePackages(packages.map(p => p.id === pkg.id ? pkg : p))} /> : <Navigate to="/admin/login" />} />
           </Routes>
         </main>
 
